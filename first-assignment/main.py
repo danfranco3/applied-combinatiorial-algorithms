@@ -25,27 +25,27 @@ def read_config(file="config.txt"):
     index = 1
     for line in lines:
         # read number of Haulers
-        if(index == 1):
+        if (index == 1):
             n_Hauler = int(line.split("//")[0])
 
         # read number of LPs
-        elif(index == 2):
+        elif (index == 2):
             n_LP = int(line.split("//")[0])
 
         # read number of ULPs
-        elif(index == 3):
+        elif (index == 3):
             n_ULP = int(line.split("//")[0])
 
         # read number of SOs
-        elif(index == 4):
+        elif (index == 4):
             n_SO = int(line.split("//")[0])
 
         # read number of CSs
-        elif(index == 5):
+        elif (index == 5):
             n_CS = int(line.split("//")[0])
 
         # read Initial position of haulers
-        elif(index == 6):
+        elif (index == 6):
             t = line.split("//")[0].split("-")
             for i in range(n_Hauler):
                 cordinate = t[i].replace("[", "").replace("]", "")
@@ -93,13 +93,13 @@ def read_config(file="config.txt"):
                     x.append(int(cordinate.split(",")[j]))
                 CS_positions.append(tuple(x))
         # read battery capacity
-        elif(index == 11):
-            if(line.split("//")[0] != '\t'):
+        elif (index == 11):
+            if (line.split("//")[0] != '\t'):
                 batery_capacity = int(line.split("//")[0])
 
         # read initial energy
-        elif(index == 12):
-            if(line.split("//")[0] != '\t'):
+        elif (index == 12):
+            if (line.split("//")[0] != '\t'):
                 initial_energy = int(line.split("//")[0])
         index += 1
     return init_haulers, LP_positions, ULP_positions, SO_positions, CS_positions, batery_capacity, initial_energy
@@ -120,10 +120,10 @@ def read_mission(file, LP_pos, ULP_pos):
         for t in temp:
             if t.startswith('U'):
                 tn = t.split('U')
-                temp_list.append(ULP_pos[int(tn[1])-1])
+                temp_list.append(ULP_pos[int(tn[1]) - 1])
             else:
                 tn = t.split('L')
-                temp_list.append(LP_pos[int(tn[1])-1])
+                temp_list.append(LP_pos[int(tn[1]) - 1])
         mission.append(temp_list)
 
     return mission, mission_strings
@@ -132,31 +132,31 @@ def read_mission(file, LP_pos, ULP_pos):
 def write_output(makespan, completion_times, exec_time, file, haulers):
     f = open(file, "w")
     f.write("//Quantitative values\n")
-    f.write(str(makespan)+"\t//Makespan" + "\n")
+    f.write(str(makespan) + "\t//Makespan" + "\n")
     for i, c in enumerate(completion_times):
-        f.write(str(c)+"\t//Mission completion time hauler " + str(i+1)+"\n")
-    f.write(str(exec_time)+"\t//Application execution time (in millisecond)"+"\n")
-    f.write("// Position of each hauler for every (discrete) time step\n")
+        f.write(str(c) + "\t//Mission completion time hauler " + str(i + 1) + "\n")
+    f.write(str(exec_time) + "\t//Application execution time (in millisecond)" + "\n")
+    f.write("//Path to the final points\n")
     print_haulers_history(f, haulers, makespan)
     f.close()
 
 
 def print_haulers_history(file, haulers, makespan):
-    for i in range(makespan-1):
-        file.write(f'{i} ,')
+    for i in range(makespan + 1):
+        file.write(f'{i},')
         for j in range(len(haulers)):
             move = haulers[j].get_move_i(i)
-            if j == len(haulers)-1:
-                file.write(f'[{move[0]} ,{move[1]}]')
+            if j == len(haulers) - 1:
+                file.write(f'[{move[0]},{move[1]}]')
             else:
-                file.write(f'[{move[0]} ,{move[1]}] , ')
+                file.write(f'[{move[0]} ,{move[1]}],')
         file.write('\n')
 
 
 class Hauler:
     def __init__(self, i, init_pos, mission: list, graph: dict):
         self.move_q = deque()
-        self.history = []
+        self.history = [init_pos]
         self.cur_pos = init_pos
         self.mission = deque(mission)  # List of addresses for the hauler to go to in order
         self.graph = graph
@@ -170,7 +170,6 @@ class Hauler:
             self.move_q.appendleft(v)
             v = prev[v]
         self.move_q.popleft()
-        print('new mission:', self.move_q)
 
     def move(self, step):
         if len(self.move_q) > 0:
@@ -226,7 +225,7 @@ def get_grid(static_objects, n, m):
     """
     grid = []
     for i in range(m):
-        grid.append([1]*n)
+        grid.append([1] * n)
     return grid
 
 
@@ -252,11 +251,13 @@ def create_graph(grid, static_objects: [(int, int)]):
             if (temp_y, temp_x) in static_objects:
                 continue
             for dy, dx in directions:
-                ny, nx = temp_y+dy, temp_x+dx
-                if (1 <= ny < rows+1) and (1 <= nx < cols+1):  # This is done so the movement cannot be out of the grid
+                ny, nx = temp_y + dy, temp_x + dx
+                if (1 <= ny < rows + 1) and (
+                        1 <= nx < cols + 1):  # This is done so the movement cannot be out of the grid
                     if (ny, nx) not in static_objects:
-                        weight = grid[ny-1][nx-1]  # Correcting only to get weight
-                        graph[(temp_y, temp_x)].append(((ny, nx), weight))  # Path from (1,1) to (1,2) is coded as (1,1): {(1, (1,2))}
+                        weight = grid[ny - 1][nx - 1]  # Correcting only to get weight
+                        graph[(temp_y, temp_x)].append(
+                            ((ny, nx), weight))  # Path from (1,1) to (1,2) is coded as (1,1): {(1, (1,2))}
     return graph
 
 
@@ -266,7 +267,7 @@ def main():
     You can also use command line argument to get input files name.
 
     functions:
-        read_config     -> input: config file name 
+        read_config     -> input: config file name
                         -> output: all variables in config file
 
         read_mission    -> input: mission file name
@@ -277,7 +278,7 @@ def main():
                         -> output: void
 
     """
-    folder = 'example/'
+    folder = ''
     config_file = folder + "config.txt"
     mission_file = folder + "mission.txt"
     output_file = folder + "output.txt"
@@ -286,10 +287,6 @@ def main():
         config_file)
 
     mission, mission_strings = read_mission(mission_file, LP_positions, ULP_positions)
-
-    for m in range(len(mission)):
-        for i in range(len(mission[m])):
-            print(mission_strings[m][i], mission[m][i])
 
     start = time.time()
     #################################
@@ -316,20 +313,19 @@ def main():
                 working_haulers.remove(h)
         mission_step += 1
 
-    print('time:', mission_step)
+    mission_step -= 1
 
     #################################
     end = time.time()
-    elapsed_time = int((end - start)*1000)
+    elapsed_time = int((end - start) * 1000)
 
     finished_haulers.sort(key=lambda x: x.index)
 
     completion_times = [h.finished_at for h in finished_haulers]
-    
+
     # call the writing function here
     # example: 
     write_output(mission_step, completion_times, elapsed_time, output_file, finished_haulers)
-
 
 
 if __name__ == "__main__":
