@@ -158,29 +158,48 @@ class Hauler:
         self.move_q = deque()
         self.history = [init_pos]
         self.cur_pos = init_pos
-        self.mission = deque(mission)  # List of addresses for the hauler to go to in order
+        self.mission = deque(mission)  # Queue of addresses for the hauler to go to in order
         self.graph = graph
         self.finished = False
         self.finished_at = 0
         self.index = i
+        self.is_charging = (False, 0)
+
+    def charged(self):
+        charging, time_charging = self.is_charging
+        if charging:
+            if time_charging < 5:
+                self.is_charging = (True, time_charging + 1)
+            else:
+                self.is_charging = (False, 0)
+        else:
+            return True
 
     def construct_step_queue(self, prev, end_node):
         v = end_node
         while v is not None:
             self.move_q.appendleft(v)
             v = prev[v]
-        self.move_q.popleft()
+        self.move_q.popleft()  # because right before v is None we add the current position of the hauler to the queue
 
-    def move(self, step):
+    def move(self, step, lp_ulp_shortest_paths):
         if len(self.move_q) > 0:
             cur_move = self.move_q.popleft()
             self.history.append(cur_move)
             self.cur_pos = cur_move
         elif len(self.mission) > 0:
-            # Think about how to keep haulers working while calculating route
-            prev, end_node = self.compute_shortest_path(self.mission.popleft())
-            self.construct_step_queue(prev, end_node)
-            self.move(step)
+
+            next_lp_ulp = self.mission.popleft()
+            prev = []
+
+            # This part updates the dictionary to avoid calculations for the same path
+            if lp_ulp_shortest_paths[self.cur_pos]:
+                prev = lp_ulp_shortest_paths[self.cur_pos]
+            else:
+                prev = self.compute_shortest_path()
+                lp_ulp_shortest_paths[self.cur_pos] = prev
+            self.construct_step_queue(prev, next_lp_ulp)
+            self.move(step, lp_ulp_shortest_paths)
         else:
             self.finished = True
             self.finished_at = step
@@ -190,7 +209,7 @@ class Hauler:
             return self.cur_pos
         return self.history[i]
 
-    def compute_shortest_path(self, end_node: (int, int)):
+    def compute_shortest_path(self):
         """
         Uses Dijkstra's algorithm to compute the shortest path from the start_node to the end_node.
         """
@@ -216,20 +235,10 @@ class Hauler:
                     prev[u] = v
                     heapq.heappush(priority_queue, (test_dist, u))
 
-        return prev, end_node
+        return prev
 
 
-def get_grid(static_objects, n, m):
-    """
-    We use this function to create a grid where the SOs have +infinite weight and all others have 1
-    """
-    grid = []
-    for i in range(m):
-        grid.append([1] * n)
-    return grid
-
-
-def create_graph(grid, static_objects: [(int, int)]):
+def create_graph(m, n, static_objects: [(int, int)]):
     """
     This function creates a graph to model the problem
     by converting the grid into a graph and
@@ -239,7 +248,9 @@ def create_graph(grid, static_objects: [(int, int)]):
     To follow the notation used by the PDF, we use x for the columns and y for the rows.
     """
 
-    rows, cols = len(grid), len(grid[0])
+    so_pos = set(static_objects)
+
+    rows, cols = m, n
 
     graph = defaultdict(lambda: [])
 
@@ -248,16 +259,15 @@ def create_graph(grid, static_objects: [(int, int)]):
     for y in range(rows):
         for x in range(cols):
             temp_y, temp_x = y + 1, x + 1  # Correcting with +1 because we start at 1 on PDF
-            if (temp_y, temp_x) in static_objects:
+            if (temp_y, temp_x) in so_pos:
                 continue
             for dy, dx in directions:
                 ny, nx = temp_y + dy, temp_x + dx
                 if (1 <= ny < rows + 1) and (
                         1 <= nx < cols + 1):  # This is done so the movement cannot be out of the grid
-                    if (ny, nx) not in static_objects:
-                        weight = grid[ny - 1][nx - 1]  # Correcting only to get weight
+                    if (ny, nx) not in so_pos:
                         graph[(temp_y, temp_x)].append(
-                            ((ny, nx), weight))  # Path from (1,1) to (1,2) is coded as (1,1): {(1, (1,2))}
+                            ((ny, nx), 1))  # Path from (1,1) to (1,2) is coded as (1,1): {(1, (1,2))}
     return graph
 
 
@@ -293,27 +303,28 @@ def main():
 
     n, m = 12, 12
 
-    grid = get_grid(SO_positions, n, m)
-
     working_haulers = []
     finished_haulers = []
 
-    graph = create_graph(grid, SO_positions)
+    # Each LP/ULP may have a path to other LPs or ULPs -- We store this in the dict below
+    lp_ulp_shortest_paths = defaultdict()
+
+    graph = create_graph(m, n, SO_positions)
 
     for i in range(len(init_haulers)):
         working_haulers.append(Hauler(i, init_haulers[i], mission[i], graph))
 
-    mission_step = 0
+    mission_time = 0
 
     while working_haulers:
+        mission_time += 1
         for h in working_haulers:
-            h.move(mission_step)
+            h.move(mission_time, lp_ulp_shortest_paths)
             if h.finished:
                 finished_haulers.append(h)
                 working_haulers.remove(h)
-        mission_step += 1
 
-    mission_step -= 1
+    final_step = mission_time - 1  # e.g. mission finished at 32 means the final step of the mission was 31
 
     #################################
     end = time.time()
@@ -324,8 +335,8 @@ def main():
     completion_times = [h.finished_at for h in finished_haulers]
 
     # call the writing function here
-    # example: 
-    write_output(mission_step, completion_times, elapsed_time, output_file, finished_haulers)
+    # example:
+    write_output(final_step, completion_times, elapsed_time, output_file, finished_haulers)
 
 
 if __name__ == "__main__":
