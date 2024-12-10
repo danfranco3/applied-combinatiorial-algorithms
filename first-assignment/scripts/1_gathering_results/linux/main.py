@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
+import math
 import time
 import heapq
 from collections import defaultdict, deque
+
+import IPython
 
 
 def read_config(file="config.txt"):
@@ -149,7 +152,7 @@ def print_haulers_history(file, haulers, makespan):
             if j == len(haulers) - 1:
                 file.write(f'[{move[0]},{move[1]}]')
             else:
-                file.write(f'[{move[0]} ,{move[1]}],')
+                file.write(f'[{move[0]},{move[1]}],')
         file.write('\n')
 
 
@@ -181,6 +184,26 @@ class Hauler:
             self.move_q.appendleft(v)
             v = prev[v]
         self.move_q.popleft()  # because right before v is None we add the current position of the hauler to the queue
+
+    def add_move(self, move):
+        self.move_q.appendleft(move)
+
+    def next_move(self, lp_ulp_shortest_paths):
+        if len(self.move_q) > 0:
+            return self.move_q[0]
+
+        elif len(self.mission) > 0:
+            next_lp_ulp = self.mission.popleft()
+            prev = []
+
+            # This part updates the dictionary to avoid calculations for the same path
+            if lp_ulp_shortest_paths[self.cur_pos]:
+                prev = lp_ulp_shortest_paths[self.cur_pos]
+            else:
+                prev = self.compute_shortest_path()
+                lp_ulp_shortest_paths[self.cur_pos] = prev
+            self.construct_step_queue(prev, next_lp_ulp)
+            return self.next_move(lp_ulp_shortest_paths)
 
     def move(self, step, lp_ulp_shortest_paths):
         if len(self.move_q) > 0:
@@ -271,6 +294,43 @@ def create_graph(m, n, static_objects: [(int, int)]):
     return graph
 
 
+def find_move(h: Hauler, cur_pos, pos_set, so_list):
+    # Check valid moves and put one of them in the move queue
+    for move, _ in h.graph[cur_pos]:
+        if move not in pos_set:
+            h.add_move(cur_pos)
+            h.add_move(move)
+            break
+
+
+def solve_move_conflicts(h_list: [Hauler], lp_ulp_shortest_paths, q, so_list):
+    """
+    Solve the conflicts.
+    """
+
+    aux_q = []
+    for h in h_list:
+        aux_q.append((-1 * len(h.history), h.index, h, h.next_move(lp_ulp_shortest_paths)))
+
+    heapq.heapify(aux_q)
+
+    pos_set = set()
+
+    while aux_q:
+        p, _, h, pos = heapq.heappop(aux_q)
+        if pos in pos_set:
+            if h.cur_pos not in pos_set:  # Try to stay in place
+                h.add_move(h.cur_pos)
+                heapq.heappush(aux_q, (p, h.index, h, h.cur_pos))
+            else:  # If trying to stay in place but can't: move somewhere
+                find_move(h, h.cur_pos, pos_set, so_list)
+                heapq.heappush(aux_q, (p, h.index, h, h.next_move(lp_ulp_shortest_paths)))
+        else:
+            pos_set.add(pos)
+            heapq.heappush(q, (p, h.index, h, pos))
+    return
+
+
 def main():
     """
     Replace your input files location and name.
@@ -316,10 +376,21 @@ def main():
 
     mission_time = 0
 
+    # My algorithm for multiple haulers:
+    # Give the haulers priorities relative to how much they have moved (more moves, higher priority)
+    # Check if any haulers are moving to the same position
+    # If yes, solve conflict by making the hauler with the least priority to stay in place
+    # Solve conflicts until no two haulers are moving to the same place
+
     while working_haulers:
         mission_time += 1
-        for h in working_haulers:
+        move_priority = []
+        heapq.heapify(move_priority)
+        solve_move_conflicts(working_haulers, lp_ulp_shortest_paths, move_priority, SO_positions)
+
+        for _, _, h, _ in move_priority:
             h.move(mission_time, lp_ulp_shortest_paths)
+
             if h.finished:
                 finished_haulers.append(h)
                 working_haulers.remove(h)
@@ -332,7 +403,7 @@ def main():
 
     finished_haulers.sort(key=lambda x: x.index)
 
-    completion_times = [h.finished_at for h in finished_haulers]
+    completion_times = [h.finished_at - 1 for h in finished_haulers]
 
     # call the writing function here
     # example:
